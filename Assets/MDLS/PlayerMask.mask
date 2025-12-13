@@ -1,0 +1,111 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!319 &31900000
+AvatarMask:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: PlayerMask
+  m_Mask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
+  m_Elements:
+  - m_Path: 
+    m_Weight: 1
+  - m_Path: Armature
+    m_Weight: 1
+  - m_Path: Armature/Bonk
+    m_Weight: 1
+  - m_Path: Armature/Bonk/Bonk_end
+    m_Weight: 1
+  - m_Path: Armature/H_hip.L
+    m_Weight: 0
+  - m_Path: Armature/H_hip.L/H_hip.L_end
+    m_Weight: 0
+  - m_Path: Armature/H_hip.R
+    m_Weight: 0
+  - m_Path: Armature/H_hip.R/H_hip.R_end
+    m_Weight: 0
+  - m_Path: Armature/H_IK.L
+    m_Weight: 0
+  - m_Path: Armature/H_IK.L/H_IK.L_end
+    m_Weight: 0
+  - m_Path: Armature/H_IK.R
+    m_Weight: 0
+  - m_Path: Armature/H_IK.R/H_IK.R_end
+    m_Weight: 0
+  - m_Path: Armature/L_hip.L
+    m_Weight: 0
+  - m_Path: Armature/L_hip.L/L_hip.L_end
+    m_Weight: 0
+  - m_Path: Armature/L_hip.R
+    m_Weight: 0
+  - m_Path: Armature/L_hip.R/L_hip.R_end
+    m_Weight: 0
+  - m_Path: Armature/L_IK.L
+    m_Weight: 0
+  - m_Path: Armature/L_IK.L/L_IK.L_end
+    m_Weight: 0
+  - m_Path: Armature/L_IK.R
+    m_Weight: 0
+  - m_Path: Armature/L_IK.R/L_IK.R_end
+    m_Weight: 0
+  - m_Path: Armature/Root
+    m_Weight: 0
+  - m_Path: Armature/Root/Spine.01
+    m_Weight: 0
+  - m_Path: Armature/Root/Spine.01/S.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.L/L_1.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.L/L_1.L/L_2.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.L/L_1.L/L_2.L/L_3.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.L/L_1.L/L_2.L/L_3.L/L_3.L_end
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.R/L_1.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.R/L_1.R/L_2.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.R/L_1.R/L_2.R/L_3.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/S.R/L_1.R/L_2.R/L_3.R/L_3.R_end
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/Backpack
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/Backpack/Rab_01
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/Backpack/Rab_01/Rab_02
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/Backpack/Rab_01/Rab_02/Rab_02_end
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.L/H_2.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.L/H_2.L/H_3.L
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.L/H_2.L/H_3.L/H_3.L_end
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.R/H_2.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.R/H_2.R/H_3.R
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/H_1.R/H_2.R/H_3.R/H_3.R_end
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/neck
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/neck/head
+    m_Weight: 1
+  - m_Path: Armature/Root/Spine.01/Spine.02/neck/head/head_end
+    m_Weight: 1
+  - m_Path: Cube
+    m_Weight: 1
+  - m_Path: Player
+    m_Weight: 1

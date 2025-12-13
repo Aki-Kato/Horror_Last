@@ -1182,6 +1182,7 @@ MonoBehaviour:
   - {fileID: 8047441164977971840}
   - {fileID: 2951011129811137900}
   - {fileID: -5079446967176230184}
+  - {fileID: 8279810528059744786}
 --- !u!114 &20468427131000705
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -2647,6 +2648,25 @@ MonoBehaviour:
   tint:
     m_OverrideState: 1
     m_Value: 0
+--- !u!114 &8279810528059744786
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0eb6c8b4c96d0264489003e05c1c9d71, type: 3}
+  m_Name: AKI_HDRP_PixelateRT
+  m_EditorClassIdentifier: Assembly-CSharp::AKI_HDRP_PixelateRT
+  active: 1
+  pixelSize:
+    m_OverrideState: 1
+    m_Value: 4
+  tint:
+    m_OverrideState: 1
+    m_Value: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &9162072798218928585
 MonoBehaviour:
   m_ObjectHideFlags: 3

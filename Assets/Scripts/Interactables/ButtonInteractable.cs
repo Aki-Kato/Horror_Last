@@ -7,28 +7,26 @@ public class ButtonInteractable : InteractableTrigger
     [Header("Animation")]
     [SerializeField] private Animator animator;
     [SerializeField] private string pressTriggerName = "Press";
-
-    [Tooltip("Если true — событие вызывается из Animation Event, а не сразу.")]
     [SerializeField] private bool useAnimationEvent = false;
 
     [Header("Logic")]
-    [Tooltip("Можно ли нажимать кнопку много раз (в целом).")]
     [SerializeField] private bool canPressMultipleTimes = true;
-
-    [Tooltip("Событие, которое произойдет сразу при нажатии кнопки.")]
     [SerializeField] private UnityEvent onPressed;
 
     private bool hasBeenPressed = false;
 
+    // === Требуемый предмет ===
+    [Header("Required Item (Optional)")]
+    [Tooltip("Если назначено — кнопка работает только при наличии предмета.")]
+    [SerializeField] private Item requiredItem;
+
+    [Tooltip("Событие, если предмет отсутствует.")]
+    [SerializeField] private UnityEvent onFail;
+
     // === Таймер ===
     [Header("Timer Settings")]
-    [Tooltip("Включить ли таймер.")]
     [SerializeField] private bool useTimer = false;
-
-    [Tooltip("Через сколько секунд после нажатия вызвать событие.")]
     [SerializeField] private float timerDelay = 2f;
-
-    [Tooltip("Событие, вызываемое таймером (после задержки).")]
     [SerializeField] private UnityEvent onTimer;
 
     private Coroutine timerRoutine;
@@ -38,36 +36,50 @@ public class ButtonInteractable : InteractableTrigger
     protected override void Start()
     {
         base.Start();
-
         if (animator == null)
             animator = GetComponent<Animator>();
     }
 
     public override bool Interact()
     {
-        // Если кнопка одноразовая и уже жали — выходим
+        // --- 1. Проверка на предмет ---
+        if (requiredItem != null)
+        {
+            // Если нет инвентаря или нужного предмета
+            if (Inventory.Instance == null || !Inventory.Instance.Contains(requiredItem))
+            {
+                Debug.Log($"{name}: Не хватает предмета {requiredItem.itemName} для активации!");
+
+                // ВЫЗЫВАЕМ СОБЫТИЕ ОТКАЗА
+                onFail?.Invoke();
+
+                return false;
+            }
+        }
+
+        // --- 2. Одноразовая кнопка ---
         if (!canPressMultipleTimes && hasBeenPressed)
             return false;
 
-        // Если есть таймер и он сейчас работает — блокируем повторное нажатие
+        // --- 3. Таймер в процессе — запрещаем нажимать ---
         if (useTimer && timerRoutine != null)
             return false;
 
         hasBeenPressed = true;
 
-        // 1) Анимация
+        // --- 4. Анимация ---
         if (animator != null && !string.IsNullOrEmpty(pressTriggerName))
         {
             animator.SetTrigger(pressTriggerName);
         }
 
-        // 2) Основное событие
+        // --- 5. Основное событие ---
         if (!useAnimationEvent)
         {
             InvokePressedEvent();
         }
 
-        // 3) Запустить таймер (если включен)
+        // --- 6. Таймер ---
         if (useTimer)
         {
             StartTimer();
@@ -81,11 +93,9 @@ public class ButtonInteractable : InteractableTrigger
         onPressed?.Invoke();
     }
 
-    // --- Таймер ----------------------------------------------------
-
+    // --- Таймер ---
     private void StartTimer()
     {
-        // раз таймер = защита, то пока он идёт, повторно мы сюда даже не попадём
         if (timerRoutine != null)
             return;
 
@@ -98,12 +108,10 @@ public class ButtonInteractable : InteractableTrigger
 
         onTimer?.Invoke();
 
-        // таймер отработал — можно снова жать кнопку
-        timerRoutine = null;
+        timerRoutine = null; // кнопка снова активна
     }
 
-    // --- Animation Event --------------------------------------------
-
+    // --- Animation Event ---
     public void AnimationEvent_TriggerButton()
     {
         if (!useAnimationEvent)

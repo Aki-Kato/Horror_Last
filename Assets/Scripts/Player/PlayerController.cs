@@ -17,6 +17,9 @@ public class PlayerController : MonoBehaviour
     [Tooltip("Опционально: узел-пивот камеры для вращения мышью/стиком по действию Look.")]
     public Transform cameraPivot;
     public bool useInternalCameraLook = false;
+    [Header("Battle Control")]
+    [SerializeField] bool isBattleMode = false;
+    [SerializeField] bool isTakingWeapon = false;
 
     [Header("Movement")]
     public float walkSpeed = 3.5f;
@@ -46,6 +49,7 @@ public class PlayerController : MonoBehaviour
     public string actionMapName = "Player";
     public string moveActionName = "Move";
     public string lookActionName = "Look";
+    public string takeWeaponActionName = "TakeWeapon";
     public string attackActionName = "Attack";
     public string interactActionName = "Interact";
     public string nextActionName = "Next";
@@ -65,6 +69,7 @@ public class PlayerController : MonoBehaviour
     InputAction _look;
     InputAction _attack;
     InputAction _interact;
+    InputAction _takeWeapon;
     InputAction _next;
     InputAction _previous;
     InputAction _sprint;
@@ -78,11 +83,6 @@ public class PlayerController : MonoBehaviour
     float _targetHeight;
 
     [Header("Animations")]
-    [SerializeField] private AnimationClip idling;
-    [SerializeField] private AnimationClip walking;
-    [SerializeField] private AnimationClip running;
-    [SerializeField] private AnimationClip crouching;
-    [SerializeField] private AnimationClip crouchWalking;
     [SerializeField] private List<AttackAnimation> attackAnimations;
     int attackCounter;
     bool isAttacking;
@@ -114,6 +114,7 @@ public class PlayerController : MonoBehaviour
         _look = map.FindAction(lookActionName, true);
         _attack = map.FindAction(attackActionName, true);
         _interact = map.FindAction(interactActionName, true);
+        _takeWeapon = map.FindAction(takeWeaponActionName, true);
         _next = map.FindAction(nextActionName, true);
         _previous = map.FindAction(previousActionName, true);
         _sprint = map.FindAction(sprintActionName, true);
@@ -137,35 +138,43 @@ public class PlayerController : MonoBehaviour
     {
         HandleLook();
         if (!_cc.enabled) return;
-
         HandleMove();
+        
         HandleGravity();
         HandleCrouchHeight();
     }
+
     void HandleMove()
     {
         if (isDead || isAttacking) return;
 
         Vector2 move = _move.ReadValue<Vector2>();
+        animatorController.SetFloat(AnimatorParameters.X, move.x);
+        animatorController.SetFloat(AnimatorParameters.Y, move.y);
         if (move == Vector2.zero)
         {
-            //Vector3 y = _planarVelocity + Vector3.up * _verticalVelocity;
-            //_cc.Move(y);
-            if (!_isCrouched)
-                animatorController.Play(idling.name);
-                
-            else
-                animatorController.Play(crouching.name);
+            animatorController.SetFloat(AnimatorParameters.Speed, 0);
             return;
         }
+        Action<Vector2> handleMove = isBattleMode ? HandleBattleMove : HandleNormalMove;
+        handleMove(move);
+    }
+    
+    void HandleNormalMove(Vector2 move)
+    {
+        
         // Базовые оси камеры по земле
         Vector3 fwd = Vector3.forward;
         Vector3 right = Vector3.right;
 
         if (cameraTransform != null)
         {
-            fwd = cameraTransform.forward; fwd.y = 0f; fwd.Normalize();
-            right = cameraTransform.right; right.y = 0f; right.Normalize();
+            fwd = cameraTransform.forward;
+            fwd.y = 0f;
+            fwd.Normalize();
+            right = cameraTransform.right;
+            right.y = 0f;
+            right.Normalize();
         }
 
         Vector3 desired = (fwd * move.y + right * move.x);
@@ -174,22 +183,21 @@ public class PlayerController : MonoBehaviour
         {
             if (!_isSprinting)
             {
-                animatorController.Play(walking.name);
                 targetSpeed = walkSpeed;
             }
 
             else
             {
-                animatorController.Play(running.name);
                 targetSpeed = sprintSpeed;
             }
 
         }
         else
         {
-            animatorController.Play(crouchWalking.name);
             targetSpeed = crouchSpeed;
         }
+
+        animatorController.SetFloat(AnimatorParameters.Speed, targetSpeed);
 
         Vector3 desiredVelocity = desired * targetSpeed;
 
@@ -209,6 +217,57 @@ public class PlayerController : MonoBehaviour
         _cc.Move(velocity * Time.deltaTime);
     }
 
+    void HandleBattleMove(Vector2 move)
+    {
+        // Базовые оси камеры по земле
+        Vector3 fwd = Vector3.forward;
+        Vector3 right = Vector3.right;
+
+        if (cameraTransform != null)
+        {
+            fwd = cameraTransform.forward;
+            fwd.y = 0f;
+            fwd.Normalize();
+
+            right = cameraTransform.right;
+            right.y = 0f;
+            right.Normalize();
+        }
+
+        // Движение относительно камеры (как у тебя)
+        Vector3 desired = (fwd * move.y + right * move.x);
+
+        float targetSpeed;
+        if (!_isCrouched)
+            targetSpeed = !_isSprinting ? walkSpeed : sprintSpeed;
+        else
+            targetSpeed = crouchSpeed;
+
+        animatorController.SetFloat(AnimatorParameters.Speed, targetSpeed);
+
+        Vector3 desiredVelocity = desired * targetSpeed;
+
+        // Плавное ускорение/торможение
+        _planarVelocity = Vector3.MoveTowards(_planarVelocity, desiredVelocity, acceleration * Time.deltaTime);
+
+        // Поворот: ВСЕГДА к yaw камеры (в боевом режиме)
+        if (cameraTransform != null)
+        {
+            Vector3 camFwd = cameraTransform.forward;
+            camFwd.y = 0f;
+
+            if (camFwd.sqrMagnitude > 0.0001f)
+            {
+                Quaternion targetRot = Quaternion.LookRotation(camFwd.normalized, Vector3.up);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+            }
+        }
+
+    // Движение
+    Vector3 velocity = _planarVelocity;
+    _cc.Move(velocity * Time.deltaTime);
+
+    }
     // Look (вращение пивота камеры, если включено)
     void HandleLook()
     {
@@ -248,11 +307,33 @@ public class PlayerController : MonoBehaviour
     {
         _isCrouched = isCrouched;
         _targetHeight = _isCrouched ? crouchHeight : standHeight;
+        animatorController.SetBool(AnimatorParameters.Crouch, isCrouched);
     }
     // Attack
+    void OnTakeWeaponPerformed(InputAction.CallbackContext _)
+    {
+        if (isTakingWeapon || isAttacking) return;
+        isBattleMode = !isBattleMode;
+        animatorController.SetBool(AnimatorParameters.Weapon, isBattleMode);
+        StartCoroutine(TakeWeaponRoutine());
+    }
+
+    IEnumerator TakeWeaponRoutine()
+    {
+        const int weaponLayerIndex = 1;
+        isTakingWeapon = true;
+        animatorController.SetLayerWeight(weaponLayerIndex, 1);
+        //yield return new WaitForEndOfFrame();
+        var clipInfo = animatorController.GetCurrentAnimatorClipInfo(weaponLayerIndex);
+        yield return new WaitForSeconds(clipInfo.Length);
+        animatorController.SetLayerWeight(weaponLayerIndex, 0);
+        isTakingWeapon = false;
+    }
+
     void OnAttackPerformed(InputAction.CallbackContext _)
     {
-        HandleAttack();
+        if(isBattleMode)
+            HandleAttack();
     }
     void HandleAttack()
     {
@@ -275,7 +356,7 @@ public class PlayerController : MonoBehaviour
     {
         var animation = attackAnimations[attackCounter % attackAnimations.Count];
         animatorController.applyRootMotion = true;
-        animatorController.Play(animation.clip.name);
+        //animatorController.Play(animation.clip.name);
         combatTimingCoroutine = StartCoroutine(CombatTimingRoutine(animation));
         yield return new WaitForEndOfFrame();
         yield return new WaitForSeconds(animation.clip.length);
@@ -359,7 +440,7 @@ public class PlayerController : MonoBehaviour
         if (_cc == null) return;
         _cc.height = Mathf.Lerp(_cc.height, _targetHeight, heightLerpSpeed * Time.deltaTime);
         Vector3 c = _cc.center;
-        c.y = _cc.height * 0.5f;
+        c.y = _cc.height * 0.55f;
         _cc.center = c;
     }
     void EnableControls()
@@ -371,6 +452,7 @@ public class PlayerController : MonoBehaviour
         _sprint.performed += OnSprintPerformed;
         _sprint.canceled += OnSprintCanceled;
         _crouch.performed += OnCrouchPerformed;
+        _takeWeapon.performed += OnTakeWeaponPerformed;
     }
     void DisableControls()
     {
@@ -381,6 +463,7 @@ public class PlayerController : MonoBehaviour
         _sprint.performed -= OnSprintPerformed;
         _sprint.canceled -= OnSprintCanceled;
         _crouch.performed -= OnCrouchPerformed;
+        _takeWeapon.performed -= OnTakeWeaponPerformed;
     }
 
     public void SetObjectToInteract(IInteractable interactable)
@@ -396,17 +479,21 @@ public class PlayerController : MonoBehaviour
     }
     IEnumerator DoInteractionMoveRoutine(AnimationClip interactionClip, IEnumerator preMoveAction = null)
     {
+        const int vaultLayerIndex = 2;
         _cc.enabled = false;
         DisableControls();
         if (preMoveAction != null)
         {
             yield return StartCoroutine(preMoveAction);
         }
+        
+        animatorController.SetLayerWeight(vaultLayerIndex, 1);
         animatorController.applyRootMotion = true;
         animatorController.Play(interactionClip.name);
         yield return new WaitForEndOfFrame();
         yield return new WaitForSeconds(interactionClip.length);
         _cc.enabled = true;
+        animatorController.SetLayerWeight(vaultLayerIndex, 0);
         EnableControls();
     }
 
