@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 using System;
 using System.Collections.Generic;
 using System.Collections;
-using System.Runtime.InteropServices;
+using Random = UnityEngine.Random;
 
 [RequireComponent(typeof(CharacterController))]
 [RequireComponent(typeof(PlayerInput))]
@@ -20,6 +20,11 @@ public class PlayerController : MonoBehaviour
     [Header("Battle Control")]
     [SerializeField] bool isBattleMode = false;
     [SerializeField] bool isTakingWeapon = false;
+    [SerializeField] private int weaponLayerIndex = 1;
+    [SerializeField] private bool _pendingToggle;
+    [SerializeField] private string weaponEmptyStateName = "EmptyState";
+    [SerializeField] private string takeWeaponStateName = "Take_Weapon";
+    [SerializeField] private string holsterWeaponStateName = "Take_Weapon 0";
 
     [Header("Movement")]
     public float walkSpeed = 3.5f;
@@ -56,10 +61,11 @@ public class PlayerController : MonoBehaviour
     public string previousActionName = "Previous";
     public string sprintActionName = "Sprint";
     public string crouchActionName = "Crouch";
+    public string dodgeActionName = "Dodge";
 
     [Header("Interaction")]
     [SerializeField] private IInteractable objectToInteract;
-    // internals
+
     CharacterController _cc;
     PlayerInput _playerInput;
 
@@ -74,6 +80,7 @@ public class PlayerController : MonoBehaviour
     InputAction _previous;
     InputAction _sprint;
     InputAction _crouch;
+    InputAction _dodge;
 
     Vector3 _planarVelocity;
     float _verticalVelocity;
@@ -81,15 +88,15 @@ public class PlayerController : MonoBehaviour
     bool _isCrouched;
     float _pitch;
     float _targetHeight;
+    [SerializeField] private bool isDodging;
 
     [Header("Animations")]
     [SerializeField] private List<AttackAnimation> attackAnimations;
-    int attackCounter;
     bool isAttacking;
     bool inCombatTiming;
+    bool wantNextAttack;
     bool isDead;
-    Coroutine attackCoroutine;
-    Coroutine combatTimingCoroutine;
+
     [SerializeField] private DamageCollider damageCollider;
 
     void Awake()
@@ -97,7 +104,7 @@ public class PlayerController : MonoBehaviour
         _instance = this;
         _cc = GetComponent<CharacterController>();
         _playerInput = GetComponent<PlayerInput>();
-
+        LockCursor();
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
@@ -119,11 +126,24 @@ public class PlayerController : MonoBehaviour
         _previous = map.FindAction(previousActionName, true);
         _sprint = map.FindAction(sprintActionName, true);
         _crouch = map.FindAction(crouchActionName, true);
+        _dodge = map.FindAction(dodgeActionName, true);
 
         _targetHeight = standHeight;
         if (_cc != null) _cc.height = standHeight;
+
+
+    }
+    void LockCursor()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
+    void UnlockCursor()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
     void OnEnable()
     {
         EnableControls();
@@ -139,18 +159,30 @@ public class PlayerController : MonoBehaviour
         HandleLook();
         if (!_cc.enabled) return;
         HandleMove();
-        
+
         HandleGravity();
         HandleCrouchHeight();
     }
 
     void HandleMove()
     {
-        if (isDead || isAttacking) return;
+        if (isDead || isDodging) return;
 
         Vector2 move = _move.ReadValue<Vector2>();
-        animatorController.SetFloat(AnimatorParameters.X, move.x);
-        animatorController.SetFloat(AnimatorParameters.Y, move.y);
+        if (isAttacking)
+        {
+            // Движение во время атаки запрещено
+            // Исключение — combat timing, где движение = ОТМЕНА атаки
+            if (inCombatTiming && move != Vector2.zero)
+            {
+                animatorController.SetBool(AnimatorParameters.Attack, false);
+            }
+
+            animatorController.SetFloat(AnimatorParameters.Speed, 0f);
+            return;
+        }
+
+        SetAnimatorMove(move.x, move.y);
         if (move == Vector2.zero)
         {
             animatorController.SetFloat(AnimatorParameters.Speed, 0);
@@ -159,10 +191,13 @@ public class PlayerController : MonoBehaviour
         Action<Vector2> handleMove = isBattleMode ? HandleBattleMove : HandleNormalMove;
         handleMove(move);
     }
-    
+    public Vector2 GetMoveInput()
+    {
+        return _move.ReadValue<Vector2>();
+    }
     void HandleNormalMove(Vector2 move)
     {
-        
+
         // Базовые оси камеры по земле
         Vector3 fwd = Vector3.forward;
         Vector3 right = Vector3.right;
@@ -237,15 +272,10 @@ public class PlayerController : MonoBehaviour
         // Движение относительно камеры (как у тебя)
         Vector3 desired = (fwd * move.y + right * move.x);
 
-        float targetSpeed;
-        if (!_isCrouched)
-            targetSpeed = !_isSprinting ? walkSpeed : sprintSpeed;
-        else
-            targetSpeed = crouchSpeed;
 
-        animatorController.SetFloat(AnimatorParameters.Speed, targetSpeed);
+        animatorController.SetFloat(AnimatorParameters.Speed, walkSpeed);
 
-        Vector3 desiredVelocity = desired * targetSpeed;
+        Vector3 desiredVelocity = desired * walkSpeed;
 
         // Плавное ускорение/торможение
         _planarVelocity = Vector3.MoveTowards(_planarVelocity, desiredVelocity, acceleration * Time.deltaTime);
@@ -263,9 +293,9 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-    // Движение
-    Vector3 velocity = _planarVelocity;
-    _cc.Move(velocity * Time.deltaTime);
+        // Движение
+        Vector3 velocity = _planarVelocity;
+        _cc.Move(velocity * Time.deltaTime);
 
     }
     // Look (вращение пивота камеры, если включено)
@@ -309,74 +339,135 @@ public class PlayerController : MonoBehaviour
         _targetHeight = _isCrouched ? crouchHeight : standHeight;
         animatorController.SetBool(AnimatorParameters.Crouch, isCrouched);
     }
-    // Attack
+
+    // WeaponMode
     void OnTakeWeaponPerformed(InputAction.CallbackContext _)
+{
+    if (isTakingWeapon || isAttacking)
+        return;
+
+    isTakingWeapon = true;
+
+    animatorController.SetLayerWeight(weaponLayerIndex, 1f);
+
+    // ВАЖНО: смотрим ТЕКУЩЕЕ состояние, но НЕ МЕНЯЕМ его
+    bool take = !isBattleMode;
+
+    string clip = take ? "Take_Weapon" : "Take_Weapon 0";
+    animatorController.Play(clip, weaponLayerIndex, 0f);
+}
+   public void EndTakeWeapon()
+{
+    // ТОЛЬКО ЗДЕСЬ меняем состояние
+    isBattleMode = !isBattleMode;
+    animatorController.SetBool(AnimatorParameters.Weapon, isBattleMode);
+
+    animatorController.SetLayerWeight(weaponLayerIndex, 0f);
+    isTakingWeapon = false;
+}
+
+    public void SetTakingWeapon(bool value)
     {
-        if (isTakingWeapon || isAttacking) return;
-        isBattleMode = !isBattleMode;
-        animatorController.SetBool(AnimatorParameters.Weapon, isBattleMode);
-        StartCoroutine(TakeWeaponRoutine());
+        isTakingWeapon = value;
     }
 
-    IEnumerator TakeWeaponRoutine()
+    public void SetCombatTiming(bool value)
     {
-        const int weaponLayerIndex = 1;
-        isTakingWeapon = true;
-        animatorController.SetLayerWeight(weaponLayerIndex, 1);
-        //yield return new WaitForEndOfFrame();
-        var clipInfo = animatorController.GetCurrentAnimatorClipInfo(weaponLayerIndex);
-        yield return new WaitForSeconds(clipInfo.Length);
-        animatorController.SetLayerWeight(weaponLayerIndex, 0);
-        isTakingWeapon = false;
+        inCombatTiming = value;
+    }
+
+    public void SetAttackState(bool value)
+    {
+        isAttacking = value;
     }
 
     void OnAttackPerformed(InputAction.CallbackContext _)
     {
-        if(isBattleMode)
-            HandleAttack();
-    }
-    void HandleAttack()
-    {
-        if (isAttacking && !inCombatTiming) return;
+        if (!isBattleMode) return;
 
-        SetCrouch(false);
-        if (inCombatTiming)
+        if (!isAttacking)
         {
-            StopCoroutine(combatTimingCoroutine);
-            StopCoroutine(attackCoroutine);
-            inCombatTiming = false;
-            attackCounter++;
+            StartAttack();
+            return;
         }
 
-        isAttacking = true;
-        attackCoroutine = StartCoroutine(AttackRoutine());
+        if (inCombatTiming)
+        {
+            wantNextAttack = true;
+        }
     }
-    
-    IEnumerator AttackRoutine()
+
+    public bool ConsumeNextAttackRequest()
     {
-        var animation = attackAnimations[attackCounter % attackAnimations.Count];
+        if (!wantNextAttack) return false;
+        wantNextAttack = false;
+        return true;
+    }
+
+    public void StartAttack()
+    {
+        if (animatorController.GetBool(AnimatorParameters.Attack))
+            return; // защита от повторного старта
+
+        Vector2 move = _move.ReadValue<Vector2>();
+        if (move == Vector2.zero)
+            move = Vector2.up;
+
+        SetAnimatorMove(move.x, move.y);
+
+        if (cameraTransform != null)
+        {
+            Vector3 fwd = cameraTransform.forward;
+            fwd.y = 0f;
+
+            if (fwd.sqrMagnitude > 0.0001f)
+                transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+        }
+
+        int id = Random.Range(0, attackAnimations.Count);
+        animatorController.SetInteger(AnimatorParameters.AttackId, id);
+        animatorController.SetBool(AnimatorParameters.Attack, true);
+    }
+
+
+
+    public void BeginDodge()
+    {
+        DisableControls();
+        isDodging = true;
         animatorController.applyRootMotion = true;
-        //animatorController.Play(animation.clip.name);
-        combatTimingCoroutine = StartCoroutine(CombatTimingRoutine(animation));
-        yield return new WaitForEndOfFrame();
-        yield return new WaitForSeconds(animation.clip.length);
-         animatorController.applyRootMotion = false;
-        isAttacking = false;
-        attackCounter = 0;
-        Debug.Log("attack is over");
     }
 
-    IEnumerator CombatTimingRoutine(AttackAnimation attackAnimation)
+    public void EndDodge()
     {
-        yield return new WaitForSeconds(attackAnimation.timingStart);
-        inCombatTiming = true;
-        Debug.Log("Timing is Started");
-        var delta = attackAnimation.timingEnd - attackAnimation.timingStart;
-        yield return new WaitForSeconds(delta);
-        inCombatTiming = false;
-        Debug.Log("Timing is Over");
+        animatorController.applyRootMotion = false;
+        isDodging = false;
+        SetAnimatorMove(0f, 0f);
+        EnableControls();
     }
 
+    private void OnDodgePerformed(InputAction.CallbackContext _)
+    {
+        if (!isBattleMode) return;
+        if (isDodging) return; // защита от спама
+
+        Vector2 move = _move.ReadValue<Vector2>();
+
+        // если стоим — по твоей логике додж назад
+        if (move == Vector2.zero) move.y = -1f;
+
+        SetAnimatorMove(move.x, move.y);
+
+        // лучше Trigger, чем Bool для одноразового действия
+        animatorController.ResetTrigger(AnimatorParameters.DodgeTrigger);
+        animatorController.SetTrigger(AnimatorParameters.DodgeTrigger);
+    }
+
+    void SetAnimatorMove(float x, float y)
+    {
+        animatorController.SetFloat(AnimatorParameters.X, x);
+        animatorController.SetFloat(AnimatorParameters.Y, y);
+    }
     // Interact
     void OnInteractPerformed(InputAction.CallbackContext _)
     {
@@ -423,7 +514,7 @@ public class PlayerController : MonoBehaviour
 
         _verticalVelocity += gravity * Time.deltaTime;
         _cc.Move(Vector3.up * _verticalVelocity * Time.deltaTime);
-        
+
     }
 
     public void EnableDamageCollider()
@@ -434,7 +525,7 @@ public class PlayerController : MonoBehaviour
     {
         damageCollider.gameObject.SetActive(false);
     }
-    
+
     void HandleCrouchHeight()
     {
         if (_cc == null) return;
@@ -453,7 +544,11 @@ public class PlayerController : MonoBehaviour
         _sprint.canceled += OnSprintCanceled;
         _crouch.performed += OnCrouchPerformed;
         _takeWeapon.performed += OnTakeWeaponPerformed;
+        _dodge.performed += OnDodgePerformed;
     }
+
+
+
     void DisableControls()
     {
         _attack.performed -= OnAttackPerformed;
@@ -464,11 +559,12 @@ public class PlayerController : MonoBehaviour
         _sprint.canceled -= OnSprintCanceled;
         _crouch.performed -= OnCrouchPerformed;
         _takeWeapon.performed -= OnTakeWeaponPerformed;
+        _dodge.performed -= OnDodgePerformed;
     }
 
     public void SetObjectToInteract(IInteractable interactable)
     {
-        
+
         Debug.Log("ObjectChange to " + interactable);
         objectToInteract = interactable;
     }
@@ -486,7 +582,7 @@ public class PlayerController : MonoBehaviour
         {
             yield return StartCoroutine(preMoveAction);
         }
-        
+
         animatorController.SetLayerWeight(vaultLayerIndex, 1);
         animatorController.applyRootMotion = true;
         animatorController.Play(interactionClip.name);
