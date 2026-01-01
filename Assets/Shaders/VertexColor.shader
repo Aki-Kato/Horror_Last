@@ -1,140 +1,139 @@
-Shader "VCZ/HDRP/Unlit_VC_Simple"
+Shader "AKI/Stylized_Emissive_VertexColor"
 {
     Properties
     {
-        [MainTexture] _BaseMap ("Base (RGB)", 2D) = "white" {}
-        [MainColor]   _BaseColor ("Tint", Color) = (1,1,1,1)
+        _EmissiveTex ("Emissive Texture (sRGB)", 2D) = "white" {}
+        _EmissiveTint ("Emissive Tint", Color) = (1,1,1,1)
+        _EmissiveBrightness ("Emissive Brightness", Range(0,4)) = 1
 
-        _UseTriplanar ("Use Triplanar (0=UV,1=Tri)", Float) = 0
-        _UV_Tiling    ("UV Tiling (xy), Offset (zw)", Vector) = (1,1,0,0)
-        _TriTiling    ("Triplanar Tiling", Float) = 1.0
-        _TriSharpness ("Triplanar Sharpness", Range(0.1,8)) = 2.0
+        _LightInfluence ("Light Influence", Range(0,1)) = 0.8
 
-        [HDR]_EmissionColor ("Emission Tint", Color) = (1,1,1,1)
-        _EmissionStrength   ("Emission Strength", Range(0,20)) = 0
-
-        _AlphaClip ("Alpha Clip (0=off)", Range(0,1)) = 0
+        [Header(Stylized Shadow)]
+        _ShadowColor ("Shadow Color", Color) = (0,0,0,1)
+        _ShadowStrength ("Shadow Strength", Range(0,1)) = 0.5
+        _ShadowThreshold ("Shadow Threshold", Range(0,1)) = 0.5
     }
 
     SubShader
     {
-        Tags{ "RenderPipeline"="HDRenderPipeline" "RenderType"="Opaque" "Queue"="Transparent" }
-        LOD 300
-        //Cull Back
-        ZWrite On
-        //ZTest LEqual
-        //ColorMask RGBA
+        Tags { "RenderType"="Opaque" "Queue"="Geometry" }
 
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        #include "Lighting.cginc"
+        #include "AutoLight.cginc"
+
+        sampler2D _EmissiveTex;
+        float4 _EmissiveTex_ST;
+        float4 _EmissiveTint;
+        float _EmissiveBrightness;
+        float _LightInfluence;
+        float4 _ShadowColor;
+        float _ShadowStrength;
+        float _ShadowThreshold;
+
+        struct appdata {
+            float4 vertex : POSITION;
+            float3 normal : NORMAL;
+            float2 uv : TEXCOORD0;
+            float4 color : COLOR;
+        };
+
+        struct v2f {
+            float4 pos : SV_POSITION;
+            float2 uv : TEXCOORD0;
+            float3 worldPos : TEXCOORD1;
+            float3 worldNorm : TEXCOORD2;
+            float3 vcol : TEXCOORD3;
+            SHADOW_COORDS(4)
+        };
+
+        v2f vert (appdata v) {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+            o.uv = TRANSFORM_TEX(v.uv, _EmissiveTex);
+            o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+            o.worldNorm = UnityObjectToWorldNormal(v.normal);
+            o.vcol = v.color.rgb;
+            TRANSFER_SHADOW(o);
+            return o;
+        }
+        ENDCG
+
+        // --- FORWARD BASE ---
         Pass
         {
-            Name "Forward"
-            HLSLPROGRAM
-            #pragma target 4.0
-            #pragma vertex   vert
-            #pragma fragment frag
-            #pragma multi_compile _ USE_TRIPLANAR
+            Tags { "LightMode"="ForwardBase" }
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment fragBase
+            #pragma multi_compile_fwdbase
 
-            // ---- Без include'ов ----
-            Texture2D    _BaseMap;
-            SamplerState sampler_BaseMap;
-
-            cbuffer UnityPerMaterial
+            float4 fragBase (v2f i) : SV_Target
             {
-                float4 _BaseColor;
-                float4 _BaseMap_ST;    // tiling/offset
-                float4 _UV_Tiling;     // extra tiling/offset
-                float  _TriTiling;
-                float  _TriSharpness;
-                float  _UseTriplanar;
-                float4 _EmissionColor;
-                float  _EmissionStrength;
-                float  _AlphaClip;
-            };
+                float3 N = normalize(i.worldNorm);
+                float3 L = normalize(_WorldSpaceLightPos0.xyz);
 
-            // Матрицы: из правильных SRP-буферов
-            cbuffer UnityPerDraw  { float4x4 unity_ObjectToWorld; float4x4 unity_WorldToObject; };
-            cbuffer UnityPerView  { float4x4 unity_MatrixVP; };   // ВАЖНО: View * Projection
+                // 1. Стилизованная маска тени (NdotL + тени от объектов)
+                float ndl = dot(N, L) * 0.5 + 0.5;
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+                float lightMask = smoothstep(_ShadowThreshold - 0.02, _ShadowThreshold + 0.02, ndl * atten);
 
-            struct appdata {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                float4 color  : COLOR;
-                float2 uv0    : TEXCOORD0;
-            };
+                // 2. Базовый эмиссив с вертекс-колором
+                float3 baseEmissive = tex2D(_EmissiveTex, i.uv).rgb * _EmissiveTint.rgb * _EmissiveBrightness * i.vcol;
 
-            struct v2f {
-                float4 posHCS : SV_POSITION;
-                float3 posWS  : TEXCOORD0;
-                float3 nrmWS  : TEXCOORD1;
-                float2 uv     : TEXCOORD2;
-                float4 color  : COLOR;
-            };
+                // 3. Освещение
+                float3 ambient = ShadeSH9(float4(N, 1.0));
+                float3 totalLight = ambient + _LightColor0.rgb * lightMask;
 
-            float3 TransformObjectToWorld(float3 p) { return mul(unity_ObjectToWorld, float4(p,1)).xyz; }
-            float4 TransformWorldToHClip (float3 p) { return mul(unity_MatrixVP, float4(p,1)); }
-            float3 TransformObjectToWorldNormal(float3 n)
-            {
-                // приблизительно (достаточно, если нет экзотического non-uniform scale)
-                float3x3 m = (float3x3)unity_ObjectToWorld;
-                return normalize(mul(m, n));
+                // 4. Смешивание (как в вашем оригинале, но с новой маской)
+                // litBase - когда объект на свету
+                float3 litBase = baseEmissive * lerp(1.0, totalLight, _LightInfluence);
+                
+                // shadowBase - когда объект в тени (умножаем на ShadowColor)
+                float3 shadowBase = litBase * _ShadowColor.rgb;
+
+                // Финальный lerp по силе тени
+                float3 finalShadow = lerp(litBase, shadowBase, _ShadowStrength);
+                float3 finalCol = lerp(finalShadow, litBase, lightMask);
+
+                return float4(finalCol, 1);
             }
-
-            v2f vert(appdata v)
-            {
-                v2f o;
-                float3 posWS = TransformObjectToWorld(v.vertex.xyz);
-                o.posHCS = TransformWorldToHClip(posWS);
-                o.posWS  = posWS;
-                o.nrmWS  = TransformObjectToWorldNormal(v.normal);
-
-                float2 uv = v.uv0 * _BaseMap_ST.xy + _BaseMap_ST.zw;
-                uv = uv * _UV_Tiling.xy + _UV_Tiling.zw;
-                o.uv = uv;
-
-                o.color = v.color;
-                return o;
-            }
-
-            float4 SampleBaseUV(float2 uv) { return _BaseMap.Sample(sampler_BaseMap, uv); }
-
-            float4 SampleBaseTri(float3 posWS, float3 nrmWS)
-            {
-                float3 n = normalize(nrmWS);
-                float3 w = pow(abs(n), _TriSharpness.xxx);
-                w /= max(w.x + w.y + w.z, 1e-5);
-
-                float s = max(_TriTiling, 1e-5);
-                float2 uvX = posWS.zy * s;
-                float2 uvY = posWS.xz * s;
-                float2 uvZ = posWS.xy * s;
-
-                float4 cx = _BaseMap.Sample(sampler_BaseMap, uvX);
-                float4 cy = _BaseMap.Sample(sampler_BaseMap, uvY);
-                float4 cz = _BaseMap.Sample(sampler_BaseMap, uvZ);
-                return cx * w.x + cy * w.y + cz * w.z;
-            }
-
-            float4 frag(v2f i) : SV_Target
-            {
-                bool useTri = false;
-                #if defined(USE_TRIPLANAR)
-                    useTri = true;
-                #endif
-                if (_UseTriplanar >= 0.5) useTri = true;
-
-                float4 texC    = useTri ? SampleBaseTri(i.posWS, i.nrmWS) : SampleBaseUV(i.uv);
-                float4 baseCol = texC * i.color * _BaseColor;
-
-                //if (_AlphaClip > 0 && baseCol.a < _AlphaClip) discard;
-
-                float3 emissive = baseCol.rgb * _EmissionColor.rgb * _EmissionStrength;
-
-                // Жёстко непрозрачный вывод
-                return float4(baseCol.rgb + emissive, 1.0);
-            }
-            ENDHLSL
+            ENDCG
         }
-    }
 
-    Fallback Off
+        // --- FORWARD ADD ---
+        Pass
+        {
+            Tags { "LightMode"="ForwardAdd" }
+            Blend One One
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment fragAdd
+            #pragma multi_compile_fwdadd_fullshadows
+
+            float4 fragAdd (v2f i) : SV_Target
+            {
+                float3 N = normalize(i.worldNorm);
+                float3 L = ( _WorldSpaceLightPos0.w == 0 ) ? normalize(_WorldSpaceLightPos0.xyz) : normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+
+                float ndl = dot(N, L) * 0.5 + 0.5;
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+                float lightMask = smoothstep(_ShadowThreshold - 0.02, _ShadowThreshold + 0.02, ndl * atten);
+
+                float3 baseEmissive = tex2D(_EmissiveTex, i.uv).rgb * _EmissiveTint.rgb * _EmissiveBrightness * i.vcol;
+                
+                // Для доп. источников считаем только добавку света
+                float3 addLight = _LightColor0.rgb * lightMask;
+                return float4(baseEmissive * addLight * _LightInfluence, 1);
+            }
+            ENDCG
+        }
+
+        // --- SHADOW CASTER ---
+        UsePass "VertexLit/SHADOWCASTER"
+    }
+    FallBack "Diffuse"
 }

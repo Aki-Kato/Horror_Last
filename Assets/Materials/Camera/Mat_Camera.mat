@@ -24,7 +24,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Mat_Camera
-  m_Shader: {fileID: 4800000, guid: e49ed8049c2d6b047bad0e99c2320547, type: 3}
+  m_Shader: {fileID: 4800000, guid: a0c9657a8387f9b4390e4a8019d09551, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -161,6 +161,7 @@ Material:
     - _Anisotropy: 0
     - _BlendMode: 0
     - _CoatMask: 0
+    - _ColorLevels: 256
     - _ColorStepsB: 1600000
     - _ColorStepsG: 1600000
     - _ColorStepsR: 1600000
@@ -228,7 +229,7 @@ Material:
     - _PaletteG: 16
     - _PaletteR: 16
     - _PerPixelSorting: 0
-    - _PixelSize: 4
+    - _PixelSize: 512
     - _RayTracing: 0
     - _ReceivesSSR: 1
     - _ReceivesSSRTransparent: 0

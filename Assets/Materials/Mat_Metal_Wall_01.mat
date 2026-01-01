@@ -8,14 +8,15 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Mat_Metal_Wall_01
-  m_Shader: {fileID: 4800000, guid: 6e4ae4064600d784cac1e41a9e6f2e59, type: 3}
+  m_Shader: {fileID: 4800000, guid: 40ef0714996a15d4c8280786ad2b629a, type: 3}
   m_Parent: {fileID: 2100000, guid: c5f57c63295440e4da7aca64b532895a, type: 2}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _USE_TRIPLANAR
+  m_InvalidKeywords:
   - _DISABLE_SSR
   - _DISABLE_SSR_TRANSPARENT
   - _NORMALMAP_TANGENT_SPACE
-  m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -40,7 +41,8 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _ShadowStrength: 0.674
     m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1
